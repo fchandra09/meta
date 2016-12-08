@@ -232,7 +232,7 @@ vector<pair<string, string>> getSplit(string word) {
   return res;
 }
 
-vector<string> generateCorrections(string query) {
+vector<pair<string, double>> generateCorrections(string query) {
   stringstream qs(query);
   string buf;
   vector<string> que;
@@ -246,7 +246,7 @@ vector<string> generateCorrections(string query) {
     return a.second < b.second;
   };
 
-  vector<string> res;
+  vector<pair<string, double>> res;
 
   for (int i = 0; i < que.size(); ++i) {
     auto candidates = getCandidates(que[i], EDITDIST);
@@ -300,6 +300,13 @@ vector<string> generateCorrections(string query) {
           pq.emplace(tmp_seqs.size() - 1, score);
         }
 
+        if (candidates.empty()) {
+          tmp = seq;
+          tmp.push_back(que[i]);
+          tmp_seqs.push_back(tmp);
+          pq.emplace(tmp_seqs.size() - 1, 1);
+        }
+
         // Add a null state
         if (i < que.size() - 1) {
           tmp = seq;
@@ -312,24 +319,27 @@ vector<string> generateCorrections(string query) {
     // sort(idx_score.begin(), idx_score.end(), comp);
     // int limit = K < idx_score.size()? K : idx_score.size();
     int limit = K < pq.size() ? K : pq.size();
+    auto max_num = pq.top().second;
     for (int j = 0; j < limit; ++j) {
       // state_seqs.push_back(tmp_seqs[idx_score[j].first]);
-
-      state_seqs.push_back(tmp_seqs[pq.top().first]);
+      auto tmp_seq = tmp_seqs[pq.top().first];
+      if (i < que.size() - 1) {
+        state_seqs.push_back(tmp_seq);
+      }
+      else {
+        string tmp = "";
+        for (auto state : tmp_seq) {
+          if (state != " ") {
+            tmp += ' ' + state;
+          }
+        }
+        res.emplace_back(tmp, pq.top().second / max_num);
+      }
       pq.pop();
     }
     for (auto seq : tmp_seqs_null) {
       state_seqs.push_back(seq);
     }
-  }
-  for (auto seq : state_seqs) {
-    string tmp = "";
-    for (auto state : seq) {
-      if (state != " ") {
-        tmp += ' ' + state;
-      }
-    }
-    res.push_back(tmp);
   }
   return res;
 }
@@ -351,7 +361,7 @@ int main()
     auto res = generateCorrections(query);
     cout << "Suggested corrections:" << endl;
     for (auto line : res) {
-      cout << line << endl;
+      cout << line.first << ' ' << line.second << endl;
     }
   }
 }
