@@ -330,9 +330,10 @@ vector<pair<string, double>> generateCorrections(string query) {
         string tmp = "";
         for (auto state : tmp_seq) {
           if (state != " ") {
-            tmp += ' ' + state;
+            tmp += state + ' ';
           }
         }
+        if (!tmp.empty()) tmp.pop_back();
         res.emplace_back(tmp, pq.top().second / max_num);
       }
       pq.pop();
@@ -342,6 +343,50 @@ vector<pair<string, double>> generateCorrections(string query) {
     }
   }
   return res;
+}
+
+void runTestData()
+{
+  std::ifstream file("test_data.txt");
+  std::string str;
+  float precision_sum = 0;
+  float recall_sum = 0;
+  int test_data_count = 0;
+
+  while (std::getline(file, str))
+  {
+    test_data_count++;
+
+    auto queries = split(str, '\t');
+    auto original_query = queries[0];
+    auto correction_truth_count = queries.size() - 1;
+    auto candidates = generateCorrections(original_query);
+    int candidate_match_count = 0;
+
+    for (auto candidate : candidates)
+    {
+      auto correction = candidate.first;
+      auto score = candidate.second;
+
+      for (int i = 1; i < queries.size(); i++)
+      {
+        if (correction == queries[i])
+        {
+          precision_sum += score;
+          candidate_match_count++;
+          break;
+        }
+      }
+    }
+
+    recall_sum += (candidate_match_count * 1.0 / correction_truth_count);
+  }
+
+  float precision = precision_sum / test_data_count;
+  float recall = recall_sum / test_data_count;
+
+  cout << "Precision: " << precision << endl;
+  cout << "Recall: " << recall << endl;
 }
 
 int main()
@@ -354,6 +399,9 @@ int main()
 
   Dict_len = loadDictByLen();
   Dict = loadDict();
+
+  //runTestData();
+
   while (1) {
     cout << "Enter a query:" << endl;
     string query;
