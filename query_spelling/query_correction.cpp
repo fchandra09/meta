@@ -17,7 +17,7 @@ using namespace std;
 #define LAMBDA 0.5
 #define MU 1
 #define K 5
-#define MERGE_EM 320
+#define MERGE_EM 200
 #define SPLIT_EM 120
 #define NULL_TRANS 0.8
 #define DEN 500
@@ -222,9 +222,11 @@ vector<pair<string, float>> getCandidates(string word, int dist) {
 vector<pair<string, string>> getSplit(string word) {
   if (word.size() < 2 || Dict.find(word) != Dict.end()) return vector<pair<string, string>>();
   vector<pair<string, string>> res;
+  //cout << "here" << endl;
   for (int i = 1; i < word.length(); ++i) {
     auto left = word.substr(0, i);
     auto right = word.substr(i);
+    //cout << left + ',' << right << endl;
     if (Dict.find(left) != Dict.end() && Dict.find(right) != Dict.end()) {
       res.emplace_back(left, right);
     }
@@ -239,8 +241,8 @@ vector<pair<string, double>> generateCorrections(string query) {
   while (qs >> buf) que.push_back(toLowerCase(buf));
 
   // cout << "Query length = " << que.size() << endl;
-  vector<vector<string>> state_seqs;
-  state_seqs.push_back(vector<string>(1, " "));
+  vector<pair<vector<string>, double>> state_seqs;
+  state_seqs.push_back(make_pair(vector<string>(1, " "), 0.0));
 
   auto comp = [](pair<int, double> a, pair<int, double> b) {
     return a.second < b.second;
@@ -251,41 +253,43 @@ vector<pair<string, double>> generateCorrections(string query) {
   for (int i = 0; i < que.size(); ++i) {
     auto candidates = getCandidates(que[i], EDITDIST);
     auto split_candidates = getSplit(que[i]);
+    //for (auto sc : split_candidates) cout << sc.first + ' ' << sc.second << endl;
 
-    vector<vector<string>> tmp_seqs;
-    vector<vector<string>> tmp_seqs_null;
-    // vector<pair<int, double>> idx_score;
+    vector<pair<vector<string>, double>> tmp_seqs;
+    vector<pair<vector<string>, double>> tmp_seqs_null;
     priority_queue<pair<int, double>, vector<pair<int, double>>, decltype(comp)> pq(comp);
 
     for (auto seq : state_seqs) {
       auto tmp = seq;
-      auto current_word = tmp.back();
+      auto current_word = tmp.first.back();
 
       // Merge, merge the current word with the previous one
       if (i > 0 && current_word == " ") {
         string merge = que[i - 1] + que[i];
         if (Dict.find(merge) == Dict.end()) continue;
-        current_word = tmp[tmp.size() - 2];
+        current_word = tmp.first[tmp.first.size() - 2];
         auto next_word = merge;
         auto score = computeScore(current_word, next_word, MERGE_EM);
-        tmp.push_back(next_word);
+        tmp.first.push_back(next_word);
+        score += tmp.second;
+        tmp.second = score;
         tmp_seqs.push_back(tmp);
         // idx_score.emplace_back(tmp_seqs.size() - 1, score);
         pq.emplace(tmp_seqs.size() - 1, score);
       }
       else {
-
         // In-word transformation, insert, delete, replace
         for (auto candidate : candidates) {
           tmp = seq;
           auto next_word = candidate.first;
           auto score = computeScore(current_word, next_word, candidate.second);
-          tmp.push_back(next_word);
+          tmp.first.push_back(next_word);
+          score += tmp.second;
+          tmp.second = score;
           tmp_seqs.push_back(tmp);
           // idx_score.emplace_back(tmp_seqs.size() - 1, score);
           pq.emplace(tmp_seqs.size() - 1, score);
         }
-
         // float penalty = Dict.find(que[i]) != Dict.end() ? 5 : 1; // if the query word is correct, reduce it's chance to be split
         // Split
         for (auto split_cand : split_candidates) {
@@ -293,24 +297,24 @@ vector<pair<string, double>> generateCorrections(string query) {
           current_word = split_cand.first;
           auto next_word = split_cand.second;
           auto score = computeScore(current_word, next_word, SPLIT_EM);
-          tmp.push_back(current_word);
-          tmp.push_back(next_word);
+          tmp.first.push_back(current_word);
+          tmp.first.push_back(next_word);
+          score += tmp.second;
+          tmp.second = score;
           tmp_seqs.push_back(tmp);
           // idx_score.emplace_back(tmp_seqs.size() - 1, score);
           pq.emplace(tmp_seqs.size() - 1, score);
         }
-
         if (candidates.empty()) {
           tmp = seq;
-          tmp.push_back(que[i]);
+          tmp.first.push_back(que[i]);
           tmp_seqs.push_back(tmp);
-          pq.emplace(tmp_seqs.size() - 1, 1);
+          pq.emplace(tmp_seqs.size() - 1, 1 + tmp.second);
         }
-
         // Add a null state
         if (i < que.size() - 1) {
           tmp = seq;
-          tmp.push_back(" ");
+          tmp.first.push_back(" ");
           tmp_seqs_null.push_back(tmp);
         }
       }
@@ -328,13 +332,15 @@ vector<pair<string, double>> generateCorrections(string query) {
       }
       else {
         string tmp = "";
-        for (auto state : tmp_seq) {
+        for (auto state : tmp_seq.first) {
           if (state != " ") {
-            tmp += state + ' ';
+            tmp += state;
+            tmp += ' ';
           }
         }
         if (!tmp.empty()) tmp.pop_back();
-        res.emplace_back(tmp, pq.top().second / max_num);
+        res.emplace_back(tmp, pq.top().second);
+        // res.emplace_back(tmp, pq.top().second / max_num);
       }
       pq.pop();
     }
@@ -363,10 +369,15 @@ void runTestData()
     auto candidates = generateCorrections(original_query);
     int candidate_match_count = 0;
 
+    //cout << str << endl;
+
     for (auto candidate : candidates)
     {
       auto correction = candidate.first;
       auto score = candidate.second;
+
+      //cout << "Candidate: " << correction << endl;
+      //cout << "Score: " << score << endl;
 
       for (int i = 1; i < queries.size(); i++)
       {
@@ -380,11 +391,16 @@ void runTestData()
     }
 
     recall_sum += (candidate_match_count * 1.0 / correction_truth_count);
+
+    //cout << "Precision sum: " << precision_sum << endl;
+    //cout << "Recall sum: " << recall_sum << endl;
+    //cout << "*****************************************************" << endl;
   }
 
   float precision = precision_sum / test_data_count;
   float recall = recall_sum / test_data_count;
 
+  //cout << "Test data count: " << test_data_count << endl;
   cout << "Precision: " << precision << endl;
   cout << "Recall: " << recall << endl;
 }
