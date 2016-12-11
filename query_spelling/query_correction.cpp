@@ -232,7 +232,7 @@ vector<pair<string, string>> getSplit(string word) {
   return res;
 }
 
-vector<string> generateCorrections(string query) {
+vector<pair<string, double>> generateCorrections(string query) {
   stringstream qs(query);
   string buf;
   vector<string> que;
@@ -246,7 +246,7 @@ vector<string> generateCorrections(string query) {
     return a.second < b.second;
   };
 
-  vector<string> res;
+  vector<pair<string, double>> res;
 
   for (int i = 0; i < que.size(); ++i) {
     auto candidates = getCandidates(que[i], EDITDIST);
@@ -300,6 +300,13 @@ vector<string> generateCorrections(string query) {
           pq.emplace(tmp_seqs.size() - 1, score);
         }
 
+        if (candidates.empty()) {
+          tmp = seq;
+          tmp.push_back(que[i]);
+          tmp_seqs.push_back(tmp);
+          pq.emplace(tmp_seqs.size() - 1, 1);
+        }
+
         // Add a null state
         if (i < que.size() - 1) {
           tmp = seq;
@@ -312,26 +319,74 @@ vector<string> generateCorrections(string query) {
     // sort(idx_score.begin(), idx_score.end(), comp);
     // int limit = K < idx_score.size()? K : idx_score.size();
     int limit = K < pq.size() ? K : pq.size();
+    auto max_num = pq.top().second;
     for (int j = 0; j < limit; ++j) {
       // state_seqs.push_back(tmp_seqs[idx_score[j].first]);
-
-      state_seqs.push_back(tmp_seqs[pq.top().first]);
+      auto tmp_seq = tmp_seqs[pq.top().first];
+      if (i < que.size() - 1) {
+        state_seqs.push_back(tmp_seq);
+      }
+      else {
+        string tmp = "";
+        for (auto state : tmp_seq) {
+          if (state != " ") {
+            tmp += state + ' ';
+          }
+        }
+        if (!tmp.empty()) tmp.pop_back();
+        res.emplace_back(tmp, pq.top().second / max_num);
+      }
       pq.pop();
     }
     for (auto seq : tmp_seqs_null) {
       state_seqs.push_back(seq);
     }
   }
-  for (auto seq : state_seqs) {
-    string tmp = "";
-    for (auto state : seq) {
-      if (state != " ") {
-        tmp += ' ' + state;
+  return res;
+}
+
+void runTestData()
+{
+  std::ifstream file("test_data.txt");
+  std::string str;
+  float precision_sum = 0;
+  float recall_sum = 0;
+  int test_data_count = 0;
+
+  while (std::getline(file, str))
+  {
+    test_data_count++;
+
+    auto queries = split(str, '\t');
+    auto original_query = queries[0];
+    auto correction_truth_count = queries.size() - 1;
+    auto candidates = generateCorrections(original_query);
+    int candidate_match_count = 0;
+
+    for (auto candidate : candidates)
+    {
+      auto correction = candidate.first;
+      auto score = candidate.second;
+
+      for (int i = 1; i < queries.size(); i++)
+      {
+        if (correction == queries[i])
+        {
+          precision_sum += score;
+          candidate_match_count++;
+          break;
+        }
       }
     }
-    res.push_back(tmp);
+
+    recall_sum += (candidate_match_count * 1.0 / correction_truth_count);
   }
-  return res;
+
+  float precision = precision_sum / test_data_count;
+  float recall = recall_sum / test_data_count;
+
+  cout << "Precision: " << precision << endl;
+  cout << "Recall: " << recall << endl;
 }
 
 int main()
@@ -344,6 +399,9 @@ int main()
 
   Dict_len = loadDictByLen();
   Dict = loadDict();
+
+  //runTestData();
+
   while (1) {
     cout << "Enter a query:" << endl;
     string query;
@@ -351,7 +409,7 @@ int main()
     auto res = generateCorrections(query);
     cout << "Suggested corrections:" << endl;
     for (auto line : res) {
-      cout << line << endl;
+      cout << line.first << ' ' << line.second << endl;
     }
   }
 }
