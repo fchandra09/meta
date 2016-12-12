@@ -350,7 +350,6 @@ void runTestData()
   float precision_sum = 0;
   float recall_sum = 0;
   int test_data_count = 0;
-  vector<double> scores = {0.98, 0.01, 0.005, 0.0035, 0.0015};
 
   while (std::getline(file, str))
   {
@@ -361,24 +360,25 @@ void runTestData()
     auto correction_truth_count = queries.size() - 1;
     auto candidates = generateCorrections(original_query);
     int candidate_match_count = 0;
+    bool precision_done = false;
 
-    cout << str << endl;
+    //cout << str << endl;
 
     for (int i = 0; i < candidates.size(); i++)
     {
       auto candidate = candidates[i];
       auto correction = candidate.first;
-      //auto score = candidate.second;
-      auto score = scores[i];
 
-      cout << "Candidate: " << correction << endl;
-      cout << "Score: " << score << endl;
+      //cout << "Candidate: " << correction << endl;
 
       for (int i = 1; i < queries.size(); i++)
       {
         if (correction == queries[i])
         {
-          precision_sum += score;
+          if (!precision_done) {
+            precision_sum += 1;
+            precision_done = true;
+          }
           candidate_match_count++;
           break;
         }
@@ -387,9 +387,9 @@ void runTestData()
 
     recall_sum += (candidate_match_count * 1.0 / correction_truth_count);
 
-    cout << "Precision sum: " << precision_sum << endl;
-    cout << "Recall sum: " << recall_sum << endl;
-    cout << "*****************************************************" << endl;
+    //cout << "Precision sum: " << precision_sum << endl;
+    //cout << "Recall sum: " << recall_sum << endl;
+    //cout << "*****************************************************" << endl;
   }
 
   float precision = precision_sum / test_data_count;
@@ -410,9 +410,9 @@ int main()
 
   loadDict();
 
-  runTestData();
+  //runTestData();
 
-  /*while (1) {
+  while (1) {
     cout << "Enter a query:" << endl;
     string query;
     getline(cin, query);
@@ -421,5 +421,5 @@ int main()
     for (auto line : res) {
       cout << line.first << ' ' << line.second << endl;
     }
-  }*/
+  }
 }
