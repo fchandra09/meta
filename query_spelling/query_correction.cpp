@@ -170,32 +170,24 @@ void loadWed(string file_name, int type) {
   file.close();
 }
 
-unordered_set<string> loadDict() {
-  unordered_set<string> dict;
+void loadDict() {
   ifstream file("dict_lower_new.txt");
   string str;
   while (getline(file, str))
   {
-    dict.insert(str);
+    Dict.insert(str);
   }
   file.close();
-  return dict;
-}
-
-unordered_map<int, vector<string>> loadDictByLen() {
-  unordered_map< int, vector<string>> dict;
-  std::ifstream file("dict_lower_new.txt");
-  std::string str;
-  while (std::getline(file, str))
-  {
-    dict[str.size()].push_back(str);
+  for (auto word : Dict) {
+    Dict_len[word.length()].push_back(word);
   }
-  file.close();
-  return dict;
 }
 
 vector<pair<string, float>> getCandidates(string word, int dist) {
   vector<pair<string, float>> candidates;
+  for (auto c : word) {
+    if (!isalpha(c)) return candidates;
+  }
   int size = word.size();
   int lower = size - dist;
   int upper = size + dist;
@@ -358,6 +350,7 @@ void runTestData()
   float precision_sum = 0;
   float recall_sum = 0;
   int test_data_count = 0;
+  vector<double> scores = {0.98, 0.01, 0.005, 0.0035, 0.0015};
 
   while (std::getline(file, str))
   {
@@ -369,15 +362,17 @@ void runTestData()
     auto candidates = generateCorrections(original_query);
     int candidate_match_count = 0;
 
-    //cout << str << endl;
+    cout << str << endl;
 
-    for (auto candidate : candidates)
+    for (int i = 0; i < candidates.size(); i++)
     {
+      auto candidate = candidates[i];
       auto correction = candidate.first;
-      auto score = candidate.second;
+      //auto score = candidate.second;
+      auto score = scores[i];
 
-      //cout << "Candidate: " << correction << endl;
-      //cout << "Score: " << score << endl;
+      cout << "Candidate: " << correction << endl;
+      cout << "Score: " << score << endl;
 
       for (int i = 1; i < queries.size(); i++)
       {
@@ -392,9 +387,9 @@ void runTestData()
 
     recall_sum += (candidate_match_count * 1.0 / correction_truth_count);
 
-    //cout << "Precision sum: " << precision_sum << endl;
-    //cout << "Recall sum: " << recall_sum << endl;
-    //cout << "*****************************************************" << endl;
+    cout << "Precision sum: " << precision_sum << endl;
+    cout << "Recall sum: " << recall_sum << endl;
+    cout << "*****************************************************" << endl;
   }
 
   float precision = precision_sum / test_data_count;
@@ -413,12 +408,11 @@ int main()
   loadWed("wed_ins.txt", 1);
   loadWed("wed_rep.txt", 2);
 
-  Dict_len = loadDictByLen();
-  Dict = loadDict();
+  loadDict();
 
-  //runTestData();
+  runTestData();
 
-  while (1) {
+  /*while (1) {
     cout << "Enter a query:" << endl;
     string query;
     getline(cin, query);
@@ -427,5 +421,5 @@ int main()
     for (auto line : res) {
       cout << line.first << ' ' << line.second << endl;
     }
-  }
+  }*/
 }
