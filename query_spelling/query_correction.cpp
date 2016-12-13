@@ -14,8 +14,8 @@
 
 using namespace std;
 
-#define LAMBDA 0.5
-#define MU 1
+// #define LAMBDA 0.5
+// #define MU 1
 #define K 5
 #define MERGE_EM 200
 #define SPLIT_EM 120
@@ -23,6 +23,9 @@ using namespace std;
 #define DEN 500
 #define EDITDIST 2
 #define SAMEWORD 200
+
+double lambda = 0.5;
+double mu = 1.0;
 
 vector<vector<int> > Wed_del(26, vector<int>(26, -1));
 vector<vector<int> > Wed_ins(26, vector<int>(26, -1));
@@ -88,7 +91,11 @@ double getTransProb(string a, string b) {
 
 double computeScore(string word1, string word2, double emission) {
   auto transition = getTransProb(word1, word2);
-  return LAMBDA * transition + MU * emission;
+  return lambda * transition + mu * emission;
+}
+
+double compScore(double transition, double emission) {
+  return lambda * transition + mu * emission;
 }
 
 pair<int, float> editDist(string str1, string str2) {
@@ -226,29 +233,27 @@ vector<pair<string, string>> getSplit(string word) {
   return res;
 }
 
-vector<pair<string, double>> generateCorrections(string query) {
+vector<pair<string, vector<double>>> generateCorrections(string query) {
   stringstream qs(query);
   string buf;
   vector<string> que;
   while (qs >> buf) que.push_back(toLowerCase(buf));
 
-  // cout << "Query length = " << que.size() << endl;
-  vector<pair<vector<string>, double>> state_seqs;
-  state_seqs.push_back(make_pair(vector<string>(1, " "), 0.0));
+  vector<pair<vector<string>, vector<double>>> state_seqs;
+  state_seqs.push_back(make_pair(vector<string>(1, " "), vector<double>(3, 0.0)));
 
   auto comp = [](pair<int, double> a, pair<int, double> b) {
     return a.second < b.second;
   };
 
-  vector<pair<string, double>> res;
+  vector<pair<string, vector<double>>> res;
 
   for (int i = 0; i < que.size(); ++i) {
     auto candidates = getCandidates(que[i], EDITDIST);
     auto split_candidates = getSplit(que[i]);
-    //for (auto sc : split_candidates) cout << sc.first + ' ' << sc.second << endl;
 
-    vector<pair<vector<string>, double>> tmp_seqs;
-    vector<pair<vector<string>, double>> tmp_seqs_null;
+    vector<pair<vector<string>, vector<double>>> tmp_seqs;
+    vector<pair<vector<string>, vector<double>>> tmp_seqs_null;
     priority_queue<pair<int, double>, vector<pair<int, double>>, decltype(comp)> pq(comp);
 
     for (auto seq : state_seqs) {
@@ -261,12 +266,15 @@ vector<pair<string, double>> generateCorrections(string query) {
         if (Dict.find(merge) == Dict.end()) continue;
         current_word = tmp.first[tmp.first.size() - 2];
         auto next_word = merge;
-        auto score = computeScore(current_word, next_word, MERGE_EM);
+        auto trans_score = getTransProb(current_word, next_word);
+        auto emi_score = MERGE_EM;
+        auto score = compScore(trans_score, emi_score);
         tmp.first.push_back(next_word);
-        score += tmp.second;
-        tmp.second = score;
+        score += tmp.second[0];
+        tmp.second[0] = score;
+        tmp.second[1] += trans_score;
+        tmp.second[2] += emi_score;
         tmp_seqs.push_back(tmp);
-        // idx_score.emplace_back(tmp_seqs.size() - 1, score);
         pq.emplace(tmp_seqs.size() - 1, score);
       }
       else {
@@ -274,12 +282,18 @@ vector<pair<string, double>> generateCorrections(string query) {
         for (auto candidate : candidates) {
           tmp = seq;
           auto next_word = candidate.first;
-          auto score = computeScore(current_word, next_word, candidate.second);
+
+          auto trans_score = getTransProb(current_word, next_word);
+          auto emi_score = candidate.second;
+          auto score = compScore(trans_score, emi_score);
+
           tmp.first.push_back(next_word);
-          score += tmp.second;
-          tmp.second = score;
+          score += tmp.second[0];
+          tmp.second[0] = score;
+          tmp.second[1] += trans_score;
+          tmp.second[2] += emi_score;
+
           tmp_seqs.push_back(tmp);
-          // idx_score.emplace_back(tmp_seqs.size() - 1, score);
           pq.emplace(tmp_seqs.size() - 1, score);
         }
         // float penalty = Dict.find(que[i]) != Dict.end() ? 5 : 1; // if the query word is correct, reduce it's chance to be split
@@ -288,20 +302,27 @@ vector<pair<string, double>> generateCorrections(string query) {
           tmp = seq;
           current_word = split_cand.first;
           auto next_word = split_cand.second;
-          auto score = computeScore(current_word, next_word, SPLIT_EM);
+
+          auto trans_score = getTransProb(current_word, next_word);
+          auto emi_score = SPLIT_EM;
+          auto score = compScore(trans_score, emi_score);
+
           tmp.first.push_back(current_word);
           tmp.first.push_back(next_word);
-          score += tmp.second;
-          tmp.second = score;
+
+          score += tmp.second[0];
+          tmp.second[0] = score;
+          tmp.second[1] += trans_score;
+          tmp.second[2] += emi_score;
+
           tmp_seqs.push_back(tmp);
-          // idx_score.emplace_back(tmp_seqs.size() - 1, score);
           pq.emplace(tmp_seqs.size() - 1, score);
         }
         if (candidates.empty()) {
           tmp = seq;
           tmp.first.push_back(que[i]);
           tmp_seqs.push_back(tmp);
-          pq.emplace(tmp_seqs.size() - 1, 1 + tmp.second);
+          pq.emplace(tmp_seqs.size() - 1, 1 + tmp.second[0]);
         }
         // Add a null state
         if (i < que.size() - 1) {
@@ -312,12 +333,10 @@ vector<pair<string, double>> generateCorrections(string query) {
       }
     }
     state_seqs.clear();
-    // sort(idx_score.begin(), idx_score.end(), comp);
-    // int limit = K < idx_score.size()? K : idx_score.size();
+
     int limit = K < pq.size() ? K : pq.size();
     auto max_num = pq.top().second;
     for (int j = 0; j < limit; ++j) {
-      // state_seqs.push_back(tmp_seqs[idx_score[j].first]);
       auto tmp_seq = tmp_seqs[pq.top().first];
       if (i < que.size() - 1) {
         state_seqs.push_back(tmp_seq);
@@ -331,7 +350,7 @@ vector<pair<string, double>> generateCorrections(string query) {
           }
         }
         if (!tmp.empty()) tmp.pop_back();
-        res.emplace_back(tmp, pq.top().second);
+        res.emplace_back(tmp, tmp_seq.second);
         // res.emplace_back(tmp, pq.top().second / max_num);
       }
       pq.pop();
@@ -391,6 +410,7 @@ void runTestData()
     //cout << "Recall sum: " << recall_sum << endl;
     //cout << "*****************************************************" << endl;
   }
+  file.close();
 
   float precision = precision_sum / test_data_count;
   float recall = recall_sum / test_data_count;
@@ -400,8 +420,85 @@ void runTestData()
   cout << "Recall: " << recall << endl;
 }
 
+
+// Param: Training set size
+// Param: Iteration limit
+// Return lamda, mu
+pair<double, double> discriminativeTraining(int training_size, int iterations) {
+  if (training_size < 1 || iterations < 1) return pair<double, double> ();
+  double lambda_ini = 0.5;
+  double mu_ini = 0.5;
+  lambda = lambda_ini;
+  mu = mu_ini;
+  cout << "Initial lambda = " << lambda << endl;
+  cout << "Initial mu = " << mu << endl;
+
+  // read query and labeled answer
+  ifstream file("training_data.txt");
+  string line;
+  int count = 0;
+  double delta_lambda = 0.0;
+  double delta_mu = 0.0;
+
+  int it = 0;
+  while (it < iterations) {
+
+    while (getline(file, line)) {
+
+      if (count == training_size) break;
+      ++count;
+      auto que_ans = split(line, '\t');
+      auto query = que_ans[0];
+      auto answer = que_ans[1];
+
+      auto corrections = generateCorrections(query);
+      auto first_correction = corrections[0].first;
+
+      if (first_correction != answer) {
+          double trans_score_training = 0;
+          double trans_score_correction = 0;
+          auto query_vec = split(query, ' ');
+          auto training_vec = split(answer, ' ');
+          auto correction_vec = split(first_correction, ' ');
+          int i = 1;
+          for (; i < training_vec.size(); ++i) {
+            trans_score_training += getTransProb(training_vec[i - 1], training_vec[i]);
+          }
+          trans_score_training /= i;
+          trans_score_correction = corrections[0].second[1] / i;
+          delta_lambda = trans_score_correction - trans_score_correction;
+
+          double emi_score_training = 0;
+          double emi_score_correction = 0;
+          i = 0;
+          while (i < min3(training_vec.size(), correction_vec.size(), query_vec.size())) {
+            if (training_vec[i] == query_vec[i]) {
+              emi_score_training += SAMEWORD;
+            }
+            else {
+              emi_score_training += editDist(query_vec[i], training_vec[i]).second;
+            }
+            ++i;
+          }
+          emi_score_correction = corrections[0].second[2];
+          delta_mu += (emi_score_training - emi_score_correction) / (i + 0.01);
+      }
+    }
+    file.close();
+    lambda += delta_lambda / count;
+    mu += delta_mu / count;
+    cout << "Lambda = " << lambda << endl;
+    cout << "Mu = " << mu << endl;
+    ++it;
+  }
+  return make_pair(lambda, mu);
+}
+
+
+
 int main()
 {
+  cout << "Please wait for loading the bigrams and dictionaries ..." << endl;
   Bigrams = loadBigram();
 
   loadWed("wed_del.txt", 0);
@@ -409,8 +506,7 @@ int main()
   loadWed("wed_rep.txt", 2);
 
   loadDict();
-
-  //runTestData();
+  // runTestData();
 
   while (1) {
     cout << "Enter a query:" << endl;
@@ -419,7 +515,7 @@ int main()
     auto res = generateCorrections(query);
     cout << "Suggested corrections:" << endl;
     for (auto line : res) {
-      cout << line.first << ' ' << line.second << endl;
+      cout << line.first + ' ' << line.second[0] << endl;
     }
   }
 }
