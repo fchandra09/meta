@@ -32,6 +32,11 @@ unordered_map<string, double> Bigrams;
 unordered_set<string> Dict;
 unordered_map<int, vector<string>> Dict_len;
 
+void QueryCorrector::setParam(double lambdaVal, double muVal) {
+  lambda = lambdaVal;
+  mu = muVal;
+}
+
 int getWed(char a, char b, int type) {
   int y = a - 'a', x = b - 'a';
   if (0 > y || y >= 26 || 0 > x || x >= 26) return 0;

@@ -12,6 +12,7 @@ class QueryCorrector
     QueryCorrector();
     pair<double, double> discriminativeTraining(int training_size, int iterations);
     vector<pair<string, vector<double>>> generateCorrections(string query);
+    void setParam(double lambdaVal, double muVal);
   private:
    double lambda = 0.5;
    double mu = 1.0;
